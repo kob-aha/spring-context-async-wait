@@ -18,8 +18,15 @@ public class SynchronousExecutorSpringAdapter implements SynchornousExecutor, Ap
     private ApplicationEventMulticaster eventMulticaster;
 
     @Override
+    public boolean runAndWaitForEvent(VoidConsumer function, ComponentLoadedEvent event, long timeout, TimeUnit timeoutUnit) {
+        SynchronousExecutorAbstract asyncWait = new SynchronousExecutorCondition(event);
+        eventMulticaster.addApplicationListener(asyncWait);
+        return asyncWait.waitForEvents(function, timeout, timeoutUnit);
+    }
+
+    @Override
     public boolean runAndWaitForEvents(VoidConsumer function, int numberOfEvents, ComponentLoadedEvent event, long timeout, TimeUnit timeoutUnit) {
-        SynchronousExecutorSemaphore asyncWait = new SynchronousExecutorSemaphore(numberOfEvents, event);
+        SynchronousExecutorAbstract asyncWait = new SynchronousExecutorSemaphore(numberOfEvents, event);
         eventMulticaster.addApplicationListener(asyncWait);
         return asyncWait.waitForEvents(function, timeout, timeoutUnit);
     }

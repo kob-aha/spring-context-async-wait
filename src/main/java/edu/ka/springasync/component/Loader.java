@@ -10,9 +10,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 @Component
 public class Loader {
@@ -28,12 +25,7 @@ public class Loader {
     @Autowired
     private ApplicationEventPublisher eventPublisher;
 
-    private Lock loadWaitLock;
-    private Condition componentLoadedCondition;
-
     public Loader() {
-        loadWaitLock = new ReentrantLock();
-        componentLoadedCondition = loadWaitLock.newCondition();
     }
 
     @Async
@@ -75,28 +67,5 @@ public class Loader {
         }
 
         System.out.println("Finished sleeping in Loader");
-    }
-
-    private boolean waitUntilLoadedCondition() {
-        boolean retVal = false;
-        try {
-            loadWaitLock.lock();
-            retVal = componentLoadedCondition.await(WAIT_TIMEOUT_SECONDES, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        } finally {
-            loadWaitLock.unlock();
-        }
-
-        return retVal;
-    }
-
-    private void notifyUsingCondition() {
-        try {
-            loadWaitLock.lock();
-            componentLoadedCondition.signal();
-        } finally {
-            loadWaitLock.unlock();
-        }
     }
 }
