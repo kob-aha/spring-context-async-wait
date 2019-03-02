@@ -1,11 +1,14 @@
 package edu.ka.springasync.component;
 
+import edu.ka.springasync.event.ComponentId;
 import edu.ka.springasync.event.ComponentLoadedEvent;
+import edu.ka.springasync.logic.SynchornousExecutor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.event.EventListener;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
-import java.util.concurrent.Semaphore;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -14,32 +17,52 @@ import java.util.concurrent.locks.ReentrantLock;
 @Component
 public class Loader {
 
-    public static final int WAIT_TIMEOUT_SECONDES = 20;
+    public static final int WAIT_TIMEOUT_SECONDES = 50;
+
     @Autowired
-    private AppComponent parentComponent;
+    private List<AppComponent> parentComponent;
+
+    @Autowired
+    private SynchornousExecutor synchornousExecutor;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     private Lock loadWaitLock;
     private Condition componentLoadedCondition;
 
-    private Semaphore loadWaitSemaphore;
-
     public Loader() {
         loadWaitLock = new ReentrantLock();
         componentLoadedCondition = loadWaitLock.newCondition();
-        loadWaitSemaphore = new Semaphore(0);
     }
 
+    @Async
     public void loadApp() {
-        System.out.println("Start loading parent component");
-        parentComponent.loadComponent();
-
-        boolean parentFinishedLoading = waitUntilLoaded();
+        boolean parentFinishedLoading = synchornousExecutor.runAndWaitForEvents(this::doLoadApp,
+                parentComponent.size(),
+                new ComponentLoadedEvent(ComponentId.PARENT),
+                WAIT_TIMEOUT_SECONDES,
+                TimeUnit.SECONDS);
 
         if (parentFinishedLoading) {
             System.out.println("Parent finished loading");
+
+            eventPublisher.publishEvent(new ComponentLoadedEvent(ComponentId.LOADER));
         } else {
             System.out.println(" ********** ERROR: Parent didn't finish loading within the time limit ********** ");
         }
+    }
+
+    private void doLoadApp() {
+
+        System.out.println("Start loading " + parentComponent.size() + " parent components");
+
+        for (AppComponent appComponent : parentComponent) {
+            appComponent.loadComponent();
+        }
+
+//        sleep();
+
     }
 
     private void sleep() {
@@ -68,23 +91,6 @@ public class Loader {
         return retVal;
     }
 
-    private boolean waitUntilLoadedSemaphore() {
-        boolean retVal = false;
-        try {
-            retVal = loadWaitSemaphore.tryAcquire(WAIT_TIMEOUT_SECONDES, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
-        return retVal;
-    }
-
-    @EventListener
-    public void onEvent(ComponentLoadedEvent event) {
-//        notifyUsingCondition();
-        notifyUsingSemaphore();
-    }
-
     private void notifyUsingCondition() {
         try {
             loadWaitLock.lock();
@@ -92,9 +98,5 @@ public class Loader {
         } finally {
             loadWaitLock.unlock();
         }
-    }
-
-    private void notifyUsingSemaphore() {
-        loadWaitSemaphore.release();
     }
 }
